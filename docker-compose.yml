@@ -1,0 +1,143 @@
+services:
+  emulators:
+    build:
+      context: ./firebase
+      dockerfile: Dockerfile
+    container_name: soc-agent-emulators
+    environment:
+      FIREBASE_PROJECT_ID: soc-agent-7e94c
+      FIREBASE_AUTH_EMULATOR_HOST: 0.0.0.0:9099
+      FIRESTORE_EMULATOR_HOST: 0.0.0.0:8080
+    ports:
+      - "9099:9099"
+      - "8080:8080"
+      - "4000:4000"
+    volumes:
+      - firebase_data:/data
+      - ./firebase:/app
+    working_dir: /app
+    command: sh -c "firebase emulators:start --project soc-agent-7e94c --config firebase.json --only auth,firestore --import=/data --export-on-exit=/data"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:4000/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: soc-agent-backend
+    working_dir: /app
+    env_file:
+      - ./backend/.env
+    environment:
+      ENVIRONMENT: development
+      PROJECT_ID: soc-agent-7e94c
+      FIREBASE_AUTH_EMULATOR_HOST: emulators:9099
+      FIRESTORE_EMULATOR_HOST: emulators:8080
+      CORS_ORIGINS: http://localhost:5173
+      HOST: 0.0.0.0
+      PORT: 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      emulators:
+        condition: service_healthy
+    command: sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+    container_name: soc-agent-frontend
+    working_dir: /app
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+      VITE_FIREBASE_AUTH_EMULATOR_URL: http://localhost:9099
+      VITE_USE_EMULATOR: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:5173').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  seed:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: soc-agent-seed
+    working_dir: /app
+    env_file:
+      - ./backend/.env
+    environment:
+      ENVIRONMENT: development
+      PROJECT_ID: soc-agent-7e94c
+      FIREBASE_AUTH_EMULATOR_HOST: emulators:9099
+      FIRESTORE_EMULATOR_HOST: emulators:8080
+      HOST: 0.0.0.0
+      PORT: 8000
+    depends_on:
+      emulators:
+        condition: service_healthy
+    command: python scripts/seed.py
+    profiles: ["tools"]
+    restart: "no"
+
+  frontend-prod:
+    profiles: ["prod"]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: prod
+    container_name: soc-agent-frontend-prod
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ngrok:
+    image: ngrok/ngrok:3.39.11-debian
+    profiles: ["tunnel"]
+    command: ["start", "backend", "--config", "/etc/ngrok.yml"]
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+    ports:
+      - "127.0.0.1:4040:4040"
+    volumes:
+      - ./ngrok.yml:/etc/ngrok.yml:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  firebase_data:
+  frontend_node_modules:

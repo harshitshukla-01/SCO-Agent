@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Organization-level documents and subcollections
+    match /organizations/{orgId} {
+      // Helper: Check authentication and tenant isolation via custom claim orgId
+      function isOrgMember() {
+        return request.auth != null && request.auth.token.orgId == orgId;
+      }
+
+      // Organization document read permission
+      allow read: if isOrgMember();
+      // Disallow all direct client writes; all writes MUST go through the backend FastAPI service
+      allow write: if false;
+
+      // Members subcollection: read-only for tenant members
+      match /members/{memberId} {
+        allow read: if isOrgMember();
+        allow write: if false;
+      }
+
+      // Policies and policy versions: read-only for tenant members
+      match /policies/{policyId} {
+        allow read: if isOrgMember();
+        allow write: if false;
+
+        match /versions/{versionId} {
+          allow read: if isOrgMember();
+          allow write: if false;
+        }
+      }
+
+      // Acknowledgements: read-only for tenant members
+      match /acknowledgements/{ackId} {
+        allow read: if isOrgMember();
+        allow write: if false;
+      }
+
+      // Audit Log: strictly read-only for tenant members, append-only via backend Admin SDK
+      match /auditLog/{entryId} {
+        allow read: if isOrgMember();
+        allow write: if false;
+      }
+
+      // Any future subcollections scoped to the organization
+      match /{allSubcollections=**} {
+        allow read: if isOrgMember();
+        allow write: if false;
+      }
+    }
+
+    // Default catch-all: deny all unmapped reads and writes
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
