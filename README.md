@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # SOC Agent
 
 SOC Agent is an open-source, multi-tenant compliance policy management application. The current MVP helps an organization draft and version policies, move them through an approval workflow, publish approved policies to members, record acknowledgements, and review administrative activity.
@@ -148,3 +149,6 @@ docker-compose.yml Local frontend, backend, and Firebase emulator services
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+=======
+# SCO-Agent
+>>>>>>> fbe8e4d071aee2a0ed0fe4ae021fb04f11053261
