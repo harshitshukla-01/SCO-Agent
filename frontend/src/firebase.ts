@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
+import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "fake-api-key-for-emulator",
@@ -12,6 +13,7 @@ const firebaseConfig = {
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
 // Connect to Firebase Auth Emulator if configured or in development
 const useEmulator = import.meta.env.VITE_USE_EMULATOR !== "false";
@@ -24,9 +26,14 @@ if (useEmulator && typeof window !== "undefined") {
       connectAuthEmulator(auth, emulatorUrl, { disableWarnings: true });
       console.log(`[Firebase] Connected Auth to Emulator at ${emulatorUrl}`);
     }
+
+    if (!(db as any)._emulatorStarted) {
+      connectFirestoreEmulator(db, "127.0.0.1", 8080);
+      console.log("[Firebase] Connected Firestore to Emulator at 127.0.0.1:8080");
+    }
   } catch (err) {
-    console.warn("[Firebase] Auth emulator connection notice:", err);
+    console.warn("[Firebase] Emulator connection notice:", err);
   }
 }
 
-export { app, auth };
+export { app, auth, db };

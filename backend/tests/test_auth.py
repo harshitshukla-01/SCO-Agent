@@ -11,6 +11,14 @@ def test_health_check(client):
     assert data["service"] == "SOC Agent API"
 
 
+def test_docs_page_allows_swagger_ui_assets(client):
+    response = client.get("/docs")
+    assert response.status_code == 200
+    assert "swagger-ui" in response.text
+    csp = response.headers.get("content-security-policy", "")
+    assert "cdn.jsdelivr.net" in csp
+
+
 def test_local_emulator_email_claim_is_accepted():
     user = AuthenticatedUser(
         uid="demo-admin",

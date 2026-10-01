@@ -6,6 +6,17 @@ from app.config import get_settings
 from app.models.project_facts import ProjectFacts
 
 
+def _build_local_policy_body(policy_name: str, template: str, fact_sources: List[dict]) -> str:
+    body = template.strip()
+    if fact_sources:
+        fact_lines = [
+            f"- {fact['field']}: {fact['value']}"
+            for fact in fact_sources
+        ]
+        body = f"{body}\n\n## Organization-specific facts\n{chr(10).join(fact_lines)}"
+    return f"{body}\n\n{DISCLAIMER}"
+
+
 TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "doc_generation" / "templates"
 TEMPLATE_BY_POLICY_ID = {
     "pol-human-resource-security-policy": "human_resource_security.md",
@@ -114,13 +125,15 @@ def generate_policy_content(
     facts: ProjectFacts,
 ) -> Tuple[str, str, List[dict]]:
     settings = get_settings()
+    fact_sources = relevant_fact_sources(policy_id, facts)
+    template = load_template(policy_id, policy_name, policy_type)
+
     if not settings.GEMINI_API_KEY:
-        raise RuntimeError("Gemini is not configured. Set GEMINI_API_KEY in the backend environment.")
+        content = _build_local_policy_body(policy_name, template, fact_sources)
+        return content, "local-template", fact_sources
 
     from google import genai
 
-    fact_sources = relevant_fact_sources(policy_id, facts)
-    template = load_template(policy_id, policy_name, policy_type)
     prompt = build_generation_prompt(policy_name, template, fact_sources)
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
     response = client.models.generate_content(

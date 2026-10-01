@@ -1,18 +1,24 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import {
   User as FirebaseUser,
+  createUserWithEmailAndPassword,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
+  updateProfile,
 } from "firebase/auth";
-import { auth } from "../firebase";
+import { doc, getFirestore, setDoc } from "firebase/firestore";
+import { app, auth } from "../firebase";
 import { CurrentUser, UserRole } from "../shared/types";
+
+const db = getFirestore(app);
 
 interface AuthContextType {
   currentUser: CurrentUser | null;
   firebaseUser: FirebaseUser | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, displayName: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -67,6 +73,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  const signUp = async (email: string, password: string, displayName: string) => {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    const finalName = displayName || cred.user.email?.split("@")[0] || "User";
+
+    await updateProfile(cred.user, { displayName: finalName });
+
+    const userRecord = {
+      uid: cred.user.uid,
+      name: finalName,
+      email: cred.user.email || email,
+      role: "user",
+      orgId: "demo-org",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    await setDoc(
+      doc(db, "organizations", "demo-org", "members", cred.user.uid),
+      userRecord,
+      { merge: true }
+    );
+    await setDoc(doc(db, "user", cred.user.uid), userRecord, { merge: true });
+
+    const tokenResult = await cred.user.getIdTokenResult(true);
+    const role = (tokenResult.claims.role as UserRole) || "user";
+    const orgId = (tokenResult.claims.orgId as string) || "demo-org";
+
+    setCurrentUser({
+      uid: cred.user.uid,
+      email: cred.user.email || "",
+      name: finalName,
+      role,
+      orgId,
+    });
+  };
+
   const signOut = async () => {
     await firebaseSignOut(auth);
     setCurrentUser(null);
@@ -80,6 +122,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         firebaseUser,
         loading,
         signIn,
+        signUp,
         signOut,
       }}
     >

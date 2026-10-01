@@ -4,6 +4,8 @@ import pytest
 from fastapi import HTTPException
 
 import app.api.admin.policy_generation as policy_generation_api_module
+import app.agent.policy_generator as policy_generator_module
+from app.models.project_facts import FactSource, ProjectFactValue, ProjectFacts
 
 
 ADMIN_A = {"Authorization": "Bearer admin-token-org-a"}
@@ -32,6 +34,37 @@ def _make_published_policy(client):
         )
         assert response.status_code == 200
     return policy["id"]
+
+
+def test_generation_falls_back_to_local_template_when_gemini_key_missing(monkeypatch):
+    facts = ProjectFacts(
+        facts={
+            "company_name": ProjectFactValue(
+                value="Example Co",
+                source=FactSource.MANUAL,
+                evidence="Confirmed by admin",
+                updated_at="2026-01-01T00:00:00Z",
+            )
+        }
+    )
+
+    class FakeSettings:
+        GEMINI_API_KEY = None
+        GEMINI_MODEL = "gemini-2.5-flash"
+
+    monkeypatch.setattr(policy_generator_module, "get_settings", lambda: FakeSettings())
+
+    content, model_name, fact_sources = policy_generator_module.generate_policy_content(
+        "Access Control Policy",
+        "pol-access-control-policy",
+        "technical",
+        facts,
+    )
+
+    assert model_name == "local-template"
+    assert "Access Control Policy" in content
+    assert "AI-generated draft" in content
+    assert fact_sources and fact_sources[0]["field"] == "company_name"
 
 
 def test_generation_keeps_published_version_until_candidate_is_published(client, monkeypatch):

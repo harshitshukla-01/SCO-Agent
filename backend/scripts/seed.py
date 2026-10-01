@@ -81,6 +81,18 @@ def get_or_create_user(email: str, password: str, display_name: str, role: str) 
     # Set custom claims with orgId and role
     auth.set_custom_user_claims(uid, {"orgId": DEMO_ORG_ID, "role": role})
     print(f"  [✓] Set custom claims for {email}: {{ orgId: '{DEMO_ORG_ID}', role: '{role}' }}")
+
+    user_now = datetime.now(timezone.utc).isoformat()
+    db.collection("user").document(uid).set({
+        "uid": uid,
+        "name": display_name,
+        "email": email,
+        "role": role,
+        "orgId": DEMO_ORG_ID,
+        "created_at": user_now,
+        "updated_at": user_now,
+    }, merge=True)
+    print(f"  [✓] Stored user document in top-level user collection: {email}")
     return uid
 
 

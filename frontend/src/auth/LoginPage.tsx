@@ -6,10 +6,12 @@ import { Shield, Lock, Mail, ArrowRight, AlertCircle, Sparkles } from "lucide-re
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { signIn, currentUser } = useAuth();
+  const { signIn, signUp, currentUser } = useAuth();
   const navigate = useNavigate();
 
   // If already logged in, redirect
@@ -29,16 +31,33 @@ export const LoginPage: React.FC = () => {
       setError("Please provide both email and password.");
       return;
     }
+    if (isSignUp && !displayName.trim()) {
+      setError("Please provide a display name for the new user.");
+      return;
+    }
 
     setIsSubmitting(true);
     setError(null);
 
     try {
-      await signIn(email, password);
+      if (isSignUp) {
+        await signUp(email, password, displayName.trim());
+      } else {
+        await signIn(email, password);
+      }
       // AuthContext will update currentUser and redirect via useEffect
     } catch (err: any) {
-      console.error("Login failure:", err);
-      if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
+      console.error(isSignUp ? "Sign-up failure:" : "Login failure:", err);
+
+      if (isSignUp) {
+        if (err.code === "auth/email-already-in-use") {
+          setError("That email already exists. Please sign in or choose another email.");
+        } else if (err.code === "auth/weak-password") {
+          setError("Password should be at least 6 characters long.");
+        } else {
+          setError(err.message || "Failed to create the account. Ensure the Firebase Auth Emulator is running.");
+        }
+      } else if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
         setError("Invalid email or password. For local demo, run the seed script first.");
       } else {
         setError(err.message || "Failed to authenticate. Ensure the Firebase Auth Emulator is running.");
@@ -49,8 +68,10 @@ export const LoginPage: React.FC = () => {
   };
 
   const fillCredentials = (demoEmail: string) => {
+    setIsSignUp(false);
     setEmail(demoEmail);
     setPassword("Password123!");
+    setDisplayName("");
     setError(null);
   };
 
@@ -119,6 +140,31 @@ export const LoginPage: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit}>
+          {isSignUp && (
+            <div className="form-group">
+              <label className="form-label" htmlFor="display-name-input">
+                Full Name
+              </label>
+              <div style={{ position: "relative" }}>
+                <input
+                  id="display-name-input"
+                  type="text"
+                  className="form-input"
+                  style={{ width: "100%", paddingLeft: "38px" }}
+                  placeholder="Jane Smith"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  required={isSignUp}
+                />
+                <Sparkles
+                  size={18}
+                  color="#64748b"
+                  style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="form-group">
             <label className="form-label" htmlFor="email-input">
               Work Email
@@ -172,10 +218,24 @@ export const LoginPage: React.FC = () => {
             style={{ width: "100%", padding: "12px", fontSize: "0.95rem" }}
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Authenticating..." : "Sign In to Organization"}
+            {isSubmitting ? (isSignUp ? "Creating Account..." : "Authenticating...") : isSignUp ? "Create Member Account" : "Sign In to Organization"}
             <ArrowRight size={18} />
           </button>
         </form>
+
+        <div style={{ marginTop: "16px", textAlign: "center" }}>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              setIsSignUp(!isSignUp);
+              setError(null);
+            }}
+            style={{ width: "100%" }}
+          >
+            {isSignUp ? "Back to Sign In" : "Create a New User"}
+          </button>
+        </div>
 
         <div style={{ marginTop: "28px", paddingTop: "20px", borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "12px", color: "#94a3b8", fontSize: "0.8rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
